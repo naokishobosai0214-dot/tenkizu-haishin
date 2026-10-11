@@ -33,6 +33,7 @@ CATALOG = {
     "FXFE5782": ("nwp", "fxfe5782", "FXFE5782 500hPa気温・700hPa湿数／850hPa気温・風・700hPa鉛直流 12・24h"),
     "FXFE5784": ("nwp", "fxfe5784", "FXFE5784 500hPa気温・700hPa湿数／850hPa気温・風・700hPa鉛直流 36・48h"),
     "FXFE577": ("nwp", "fxfe577", "FXFE577 500hPa気温・700hPa湿数／850hPa気温・風・700hPa鉛直流 72h"),
+    "FUPA302": ("nwp", "fupa302", "FUPA302 300hPa高度・等風速線・気温 24時間予想"),
     "FXJP854": ("nwp", "fxjp854", "FXJP854 850hPa相当温位・風 12〜48h"),
 }
 
@@ -143,7 +144,11 @@ class Fetcher:
         return pdf_to_image(data), when
 
     def panel(self, spec, ft):
-        """spec = "FXFE502.1" のように 図の名前.パネル番号。ft = 予想時間。パネルだけ切り出した Chart を返す。"""
+        """表の1マス分の Chart を返す。ft = 予想時間(0 は実況)。
+        spec = "FXFE502.1" のように 図の名前.パネル番号 ならそのパネルだけ切り出す。"ASAS" のように番号なしなら図全体。"""
+        if "." not in spec:
+            c = self.chart(spec)
+            return Chart(spec, f"{'実況' if ft == 0 else f'T={ft}'}  {spec}", c.when, c.image)
         import pymupdf
         from PIL import Image
         name, idx = spec.split(".")
@@ -155,14 +160,15 @@ class Fetcher:
         clip = pymupdf.Rect(x0 - 2, y0 - 2, x1 + 2, min(y1 + 22, page.rect.y1))
         pix = page.get_pixmap(dpi=PANEL_DPI, clip=clip)
         image = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
-        if len(rects) == 4:
+        if len(rects) == 1 or name == "FXJP854":
+            pos = ""
+        elif len(rects) == 4:
             pos = "上段" if int(idx) <= 2 else "下段"
-            if name == "FXJP854":
-                pos = ""
         else:
             pos = "上段" if int(idx) == 1 else "下段"
-        return Chart(spec, f"T={ft}  {name} {pos}".rstrip(), f"{tlabel(init + timedelta(hours=ft))} 初期値{init:%d}日{init:%H}UTC",
-                     overlay.apply(spec, image))
+        head = "実況" if ft == 0 else f"T={ft}"
+        when = tlabel(init) if ft == 0 else f"{tlabel(init + timedelta(hours=ft))} 初期値{init:%d}日{init:%H}UTC"
+        return Chart(spec, f"{head}  {name} {pos}".rstrip(), when, overlay.apply(spec, image))
 
     def chart(self, name):
         kind, arg, title = CATALOG[name]
