@@ -8,19 +8,18 @@
 #   "ASAS" のように番号なしは図全体。null は空きマス。ft は列ごとの予想時間(0 = 実況)。cell_w は1マスの幅(px)。
 #   {cell: FXJP854.1, ft: 12, prev: true} は「1つ前の初期値の T=12」(今の実況と同じ時刻の予想)。
 # highlight に書いた図は赤い太枠で囲む。
-#   地上: ASAS(最新) ASAS_obs(高層の実況と同じ時刻) ASAS_12h_ago ASAS_24h_ago FSAS24 FSAS48
+#   地上: ASAS(最新) ASAS_obs ASAS_obs_12h_ago ASAS_obs_24h_ago(数値予報と同じ00/12UTCから) ASAS_12h_ago ASAS_24h_ago FSAS24 FSAS48
 #   高層実況: AUPA20 AUPQ35 AUPQ78 AXFE578
 #   数値予報: FUPA302 FXFE502 FXFE504 FXFE507 FXFE5782 FXFE5784 FXFE577 FXJP854
 # 送る時刻は .github/workflows/send.yml の cron(UTC) で決める。
 
 pages:
-  - title: 地上天気図(実況 24時間前 → 予想 48時間後)
-    # 上の行=実況(24時間前・12時間前・最新)、下の行=予想(12・24・36・48時間後)
-    # FSAS は24・48時間しかないので、12・36時間は数値予報図の地上のコマ(FXFE502・504 の下段左)
-    highlight: [ASAS]
+  - title: 地上天気図(実況 → 予想 48時間後)
+    # 上の行=実況。数値予報と同じ時刻(直近の00UTCか12UTC)と、その12・24時間前。下の行=予想 FSAS24・FSAS48
+    highlight: [ASAS_obs]
     rows:
-      - [ASAS_24h_ago, ASAS_12h_ago, ASAS]
-      - [{cell: FXFE502.3, ft: 12}, FSAS24, {cell: FXFE504.3, ft: 36}, FSAS48]
+      - [ASAS_obs_24h_ago, ASAS_obs_12h_ago, ASAS_obs]
+      - [FSAS24, FSAS48]
 
   - title: 実況天気図(200hPa → 地上)
     type: matrix

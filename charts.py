@@ -21,7 +21,10 @@ CATALOG = {
     "ASAS": ("asas", 0, "地上天気図 ASAS 最新"),
     "ASAS_12h_ago": ("asas", 12, "地上天気図 ASAS 12時間前"),
     "ASAS_24h_ago": ("asas", 24, "地上天気図 ASAS 24時間前"),
-    "ASAS_obs": ("asas_obs", "aupq35", "地上天気図 ASAS"),  # 高層の実況と同じ時刻のASAS
+    # 数値予報と同じ時刻(直近の00UTCか12UTC。高層の実況 AUPQ35 の時刻)の ASAS と、そこから12・24時間前
+    "ASAS_obs": ("asas_obs", 0, "地上天気図 ASAS 実況"),
+    "ASAS_obs_12h_ago": ("asas_obs", 12, "地上天気図 ASAS 12時間前"),
+    "ASAS_obs_24h_ago": ("asas_obs", 24, "地上天気図 ASAS 24時間前"),
     "FSAS24": ("fsas", 24, "地上 24時間予想 FSAS24"),
     "FSAS48": ("fsas", 48, "地上 48時間予想 FSAS48"),
     "AUPA20": ("nwp", "aupa20", "AUPA20 200hPa 高度・気温・風・圏界面"),
@@ -119,8 +122,8 @@ class Fetcher:
         data, _ = get(f"{WXCHART}{t:%Y%m}/ASAS_MONO_{t:%Y%m%d%H%M}.pdf")
         return pdf_to_image(data), tlabel(t)
 
-    def asas_obs(self, ref):
-        t = self.nwp_pdf(ref)[1]
+    def asas_obs(self, back):
+        t = self.nwp_pdf("aupq35")[1] - timedelta(hours=back)
         data, _ = get(f"{WXCHART}{t:%Y%m}/ASAS_MONO_{t:%Y%m%d%H%M}.pdf")
         return pdf_to_image(data), tlabel(t)
 
