@@ -146,9 +146,28 @@ def build():
             singles.append({"name": c.name, "title": c.title, "when": c.when, "file": f})
         pages.append({"title": p["title"], "full": full, "preview": prev, "charts": singles})
         print(f"  {p['title']}: {len(charts)}枚 → {full}")
+    make_pdf(pages)
     write_index(pages, made_at)
     open(os.path.join(SITE, "state.json"), "w", encoding="utf-8").write(json.dumps({"nwp": nwp, "made_at": made_at}))
     return pages, now
+
+
+PDF_NAME = "latest.pdf"  # いつも同じURLで最新が取れるように(iPad のショートカット・GoodNotes 用)
+
+
+def make_pdf(pages):
+    """まとめ画像を1ページ1枚の PDF にする(JPEG を作り直さずにそのまま入れる)。"""
+    import pymupdf
+    from PIL import Image
+    doc = pymupdf.open()
+    for p in pages:
+        path = os.path.join(SITE, p["full"])
+        w, h = Image.open(path).size
+        k = 72 / 200  # 200dpi 相当の紙の大きさにする
+        page = doc.new_page(width=w * k, height=h * k)
+        page.insert_image(page.rect, filename=path)
+    doc.set_metadata({"title": "天気図配信", "author": "出典：気象庁ホームページ"})
+    doc.save(os.path.join(SITE, PDF_NAME), garbage=3, deflate=True)
 
 
 def write_index(pages, made_at):
@@ -165,6 +184,7 @@ def write_index(pages, made_at):
 img{{width:100%;height:auto;border:1px solid #ccc}}h2{{font-size:18px;margin:32px 0 8px;padding:6px 8px;background:#10305a;color:#fff}}
 h3{{font-size:15px;margin:20px 0 6px}}h3 small{{font-weight:normal;color:#555}}nav a{{margin-right:12px}}</style></head>
 <body><h1 style="font-size:20px">天気図配信 <small>{made_at}</small></h1>
+<p><a href="{PDF_NAME}" style="display:inline-block;padding:10px 16px;background:#10305a;color:#fff;border-radius:6px;text-decoration:none">PDFで開く(GoodNotes 用・{len(pages)}ページ)</a></p>
 <nav>{toc}</nav><p style="font-size:13px;color:#555">まとめ画像のあとに1枚ずつの図があります。図をタップすると原寸で開きます(拡大できます)。</p>{figs}
 <p style="color:#666;font-size:12px">出典：気象庁ホームページ</p></body></html>"""
     open(os.path.join(SITE, "index.html"), "w", encoding="utf-8").write(html)

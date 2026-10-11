@@ -10,7 +10,9 @@ import urllib.request
 
 def send(subject, pages):
     base = os.environ["PAGE_URL"].rstrip("/") + "/"
-    text = subject + "\n" + "\n".join(f"・{p['title']}" for p in pages) + f"\n\n{base}\n出典：気象庁"
+    v = pages[0]["full"][3:15]  # 古いPDFが表示されないよう、回ごとに変わる印を付ける
+    text = (subject + "\n" + "\n".join(f"・{p['title']}" for p in pages)
+            + f"\n\nページ: {base}\nPDF(GoodNotes用): {base}latest.pdf?v={v}\n出典：気象庁")
     messages = [{"type": "text", "text": text}]
     for p in pages[:4]:
         messages.append({"type": "image", "originalContentUrl": base + p["full"], "previewImageUrl": base + p["preview"]})
