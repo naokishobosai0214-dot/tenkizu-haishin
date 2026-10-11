@@ -45,7 +45,7 @@ def check():
     fresh = [n for n in cur if cur[n] != old.get(n)]
     utc = datetime.now(timezone.utc)
     last_chance = utc.hour in (5, 17) and utc.minute >= 50
-    changed = bool(cur) and (len(fresh) == len(cur) or (fresh and last_chance))
+    changed = bool(cur) and (len(fresh) == len(cur) or (bool(fresh) and last_chance))
     if os.environ.get("FORCE") == "true":
         changed = True
     print(f"更新された図 {len(fresh)}/{len(cur)} → changed={changed}")
