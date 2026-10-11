@@ -1,0 +1,68 @@
+# 決まった時刻に天気図を並べた画像を作り、ページ(GitHub Pages)に公開してから、メールと LINE で送る。
+# 時刻は UTC。GitHub の時刻指定は数分〜数十分遅れることがあるので、少し前に設定している。
+#   "40 21 * * *" = 朝 6:40 JST(届くのは7時前後)   "40 9 * * *" = 夕 18:40 JST(届くのは19時前後)
+# 手動実行(Actions → send → Run workflow)でいつでも試し送信できる。
+name: send
+
+on:
+  schedule:
+    - cron: "40 21 * * *"
+    - cron: "40 9 * * *"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "送り先を絞る(both / mail / line / none)"
+        type: choice
+        options: [both, mail, line, none]
+        default: both
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: 天気図を取って並べる
+        run: python -X utf8 run.py --dry-run
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: ページに公開する
+        id: deploy
+        uses: actions/deploy-pages@v4
+      - name: メールで送る
+        if: inputs.only == '' || inputs.only == 'both' || inputs.only == 'mail'
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          REPORT_TO: ${{ secrets.REPORT_TO }}
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: python -X utf8 run.py --send-only --only mail
+      - name: LINEで送る
+        if: inputs.only == '' || inputs.only == 'both' || inputs.only == 'line'
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: python -X utf8 run.py --send-only --only line
+      # 60日間リポジトリに変更がないと、時刻指定の実行が止まるため、有効にし直しておく
+      - name: 自動実行を止めないようにする
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/send.yml/enable"
