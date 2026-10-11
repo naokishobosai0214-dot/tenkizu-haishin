@@ -9,9 +9,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
-import pymupdf
-from PIL import Image
-
 import overlay
 
 WXCHART = "https://www.data.jma.go.jp/yoho/data/wxchart/quick/"
@@ -47,7 +44,7 @@ class Chart:
     name: str
     title: str
     when: str          # 画像に書く時刻の説明
-    image: Image.Image
+    image: "Image.Image"
 
 
 def get(url):
@@ -57,6 +54,8 @@ def get(url):
 
 
 def pdf_to_image(data):
+    import pymupdf  # 更新チェックだけのときは入れずに済むよう、ここで読む
+    from PIL import Image
     pix = pymupdf.open(stream=data, filetype="pdf")[0].get_pixmap(dpi=DPI)
     return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
 
