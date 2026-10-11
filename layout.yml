@@ -2,6 +2,9 @@
 # 1ページ = 1枚の画像 = LINE の吹き出し1つ(LINE は文字1つ＋画像4枚まで。5ページ目以降はメールとページだけ)。
 # cols = 横に並べる枚数。charts は左上から右へ、行が埋まったら次の行。
 # 使える図の名前は charts.py の CATALOG(下にも一覧)。
+# type: matrix のページは、数値予報図をパネルに切り分けて「予想時間を横・高さの層を縦」の表にする。
+#   cells の "FXFE502.1" は FXFE502 の1番目のパネル(上の行→下の行、左→右の順。FXFE507・577 は 1=上段 2=下段)。
+#   null は空きマス。ft は列ごとの予想時間。
 #   地上: ASAS(最新) ASAS_12h_ago ASAS_24h_ago FSAS24 FSAS48
 #   高層実況: AUPA20 AUPQ35 AUPQ78 AXFE578
 #   数値予報: FXFE502 FXFE504 FXFE507 FXFE5782 FXFE5784 FXFE577 FXJP854
@@ -12,14 +15,21 @@ pages:
     cols: 3
     charts: [ASAS_24h_ago, ASAS_12h_ago, ASAS, FSAS24, FSAS48]
 
-  - title: 500hPa高度・渦度／地上気圧(実況 → 12・24 → 36・48 → 72時間)
+  - title: 高層天気図(実況)
     cols: 4
-    charts: [AXFE578, FXFE502, FXFE504, FXFE507]
+    charts: [AUPA20, AUPQ35, AUPQ78, AXFE578]
 
-  - title: 700hPa湿数・850hPa気温(実況 → 12・24 → 36・48 → 72時間)
-    cols: 4
-    charts: [AUPQ78, FXFE5782, FXFE5784, FXFE577]
-
-  - title: 上層の実況・850hPa相当温位(予想)
-    cols: 3
-    charts: [AUPA20, AUPQ35, FXJP854]
+  - title: 数値予報天気図(予想)
+    type: matrix
+    ft: [12, 24, 36, 48, 72]
+    rows:
+      - label: 500hPa 高度・渦度
+        cells: [FXFE502.1, FXFE502.2, FXFE504.1, FXFE504.2, FXFE507.1]
+      - label: 700hPa 湿数・500hPa 気温
+        cells: [FXFE5782.1, FXFE5782.2, FXFE5784.1, FXFE5784.2, FXFE577.1]
+      - label: 850hPa 気温・風・700hPa 鉛直流
+        cells: [FXFE5782.3, FXFE5782.4, FXFE5784.3, FXFE5784.4, FXFE577.2]
+      - label: 地上 気圧・降水量
+        cells: [FXFE502.3, FXFE502.4, FXFE504.3, FXFE504.4, FXFE507.2]
+      - label: 850hPa 相当温位・風
+        cells: [FXJP854.1, FXJP854.2, FXJP854.3, FXJP854.4, null]

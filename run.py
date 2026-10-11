@@ -28,8 +28,26 @@ def load_layout():
     return yaml.safe_load(open(os.path.join(_here, "layout.yml"), encoding="utf-8"))
 
 
+def page_names(p):
+    """そのページで使う図の名前(パネル指定 "FXFE502.1" は図の名前に直す。重ならないように)。"""
+    if p.get("type") == "matrix":
+        names = [c.split(".")[0] for row in p["rows"] for c in row["cells"] if c]
+    else:
+        names = p["charts"]
+    return list(dict.fromkeys(names))
+
+
 def layout_names(layout):
-    return [n for p in layout["pages"] for n in p["charts"]]
+    return [n for p in layout["pages"] for n in page_names(p)]
+
+
+def source_text(cells, fts):
+    """表の1行で引用した天気図を「FXFE502 上段(T=12・24)」のように書く。"""
+    used = {}
+    for c, ft in zip(cells, fts):
+        if c:
+            used.setdefault(c.title.split("  ", 1)[1], []).append(str(ft))
+    return "・".join(f"{k}(T={'・'.join(v)})" for k, v in used.items())
 
 
 def check():
@@ -54,27 +72,43 @@ def check():
 
 
 def build():
-    from compose import compose  # PIL が要るので、作るときだけ読む
+    from compose import compose, compose_matrix  # PIL が要るので、作るときだけ読む
     layout = load_layout()
     os.makedirs(SITE, exist_ok=True)
     nwp = nwp_updated(layout_names(layout))  # 取る前に調べる(取得中に更新されても次回また送れるように)
     now = datetime.now(JST)
     stamp = now.strftime("%Y%m%d%H%M")
-    made_at = f"{now:%Y/%m/%d %H:%M} JST 作成"
+    utc = now.astimezone(timezone.utc)
+    made_at = f"{utc:%Y/%m/%d %H:%M}UTC ({now:%m/%d %H:%M}JST) 作成"
     fetcher = Fetcher()
     pages = []
     for i, p in enumerate(layout["pages"], 1):
-        charts = []
-        for name in p["charts"]:
+        for name in page_names(p):
             if name not in CATALOG:
                 raise SystemExit(f"layout.yml の図の名前が違います: {name}")
+        charts = []  # ページに載せる元の図(1枚ずつ見る用)
+        for name in page_names(p):
             try:
                 charts.append(fetcher.chart(name))
             except Exception as e:  # 1枚取れなくても他は送る
                 print(f"  取得できず {name}: {e}")
         if not charts:
             continue
-        img = compose(p["title"], charts, p.get("cols", 2), made_at)
+        if p.get("type") == "matrix":
+            rows = []
+            for row in p["rows"]:
+                cells = []
+                for spec, ft in zip(row["cells"], p["ft"]):
+                    try:
+                        cells.append(fetcher.panel(spec, ft) if spec else None)
+                    except Exception as e:
+                        print(f"  切り出せず {spec}: {e}")
+                        cells.append(None)
+                if any(cells):
+                    rows.append((row["label"], source_text(cells, p["ft"]), cells))
+            img = compose_matrix(p["title"], rows, len(p["ft"]), made_at)
+        else:
+            img = compose(p["title"], charts, p.get("cols", 2), made_at)
         full = f"p{i}_{stamp}.jpg"
         prev = f"p{i}_{stamp}_s.jpg"
         img.save(os.path.join(SITE, full), quality=85, optimize=True)
@@ -129,7 +163,7 @@ def main():
         pages, now = build()
     if a.dry_run or not pages:
         return
-    subject = f"天気図 {now:%m/%d %H:%M}"
+    subject = f"天気図 {now.astimezone(timezone.utc):%d日%H:%M}UTC ({now:%m/%d %H:%M}JST)"
     if a.only in (None, "mail"):
         import send_mail
         send_mail.send(subject, pages, SITE)

@@ -60,9 +60,23 @@ def pdf_to_image(data):
     return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
 
 
-def jst(t):
+def tlabel(t):
+    """時刻の書き方: 世界標準時が主、日本時間は括弧。t は UTC。"""
     j = t + timedelta(hours=9)
-    return f"{j.month}/{j.day} {j.hour}時JST ({t:%d}日{t:%H}UTC)"
+    return f"{t:%d}日{t:%H}UTC ({j.month}/{j.day} {j.hour}時JST)"
+
+
+PANEL_DPI = 160
+
+
+def panel_rects(page):
+    """数値予報図のページから、各パネルの枠を 上の行→下の行、左→右 の順に返す(番号 1〜)。"""
+    rects = set()
+    for g in page.get_drawings():
+        for it in g["items"]:
+            if it[0] == "re" and it[1].width > 150 and it[1].height > 150:
+                rects.add(tuple(round(v, 1) for v in it[1]))
+    return sorted(rects, key=lambda r: (round(r[1]), r[0]))
 
 
 def valid_time(name):
@@ -91,6 +105,7 @@ class Fetcher:
 
     def __init__(self):
         self._list = None
+        self._nwp = {}
 
     def wxlist(self):
         if self._list is None:
@@ -100,25 +115,54 @@ class Fetcher:
     def asas(self, back):
         t = valid_time(self.wxlist()["now"][-1]) - timedelta(hours=back)
         data, _ = get(f"{WXCHART}{t:%Y%m}/ASAS_MONO_{t:%Y%m%d%H%M}.pdf")
-        return pdf_to_image(data), jst(t)
+        return pdf_to_image(data), tlabel(t)
 
     def fsas(self, ft):
         init = valid_time(self.wxlist()[f"ft{ft}"][-1])
         data, _ = get(f"{WXCHART}FSAS{ft}_MONO_ASIA.pdf")
-        return pdf_to_image(data), f"{jst(init + timedelta(hours=ft))} 初期値{init:%d}日{init:%H}UTC"
+        return pdf_to_image(data), f"{tlabel(init + timedelta(hours=ft))} 初期値{init:%d}日{init:%H}UTC"
+
+    def nwp_pdf(self, name):
+        """00UTC版と12UTC版のうち、更新が新しい方の (PDFの中身, 図の時刻UTC)。"""
+        if name not in self._nwp:
+            got = []
+            for hh in ("00", "12"):
+                data, mod = get(f"{NWPMAP}{name}_{hh}.pdf")
+                got.append((parsedate_to_datetime(mod), hh, data))
+            mod, hh, data = max(got)
+            mod = mod.astimezone(timezone.utc).replace(tzinfo=None)
+            t = mod.replace(hour=int(hh), minute=0, second=0, microsecond=0)
+            if t > mod:
+                t -= timedelta(days=1)
+            self._nwp[name] = (data, t)
+        return self._nwp[name]
 
     def nwp(self, name):
-        # 00UTC版と12UTC版のうち、更新が新しい方
-        got = []
-        for hh in ("00", "12"):
-            data, mod = get(f"{NWPMAP}{name}_{hh}.pdf")
-            got.append((parsedate_to_datetime(mod), hh, data))
-        mod, hh, data = max(got)
-        t = mod.astimezone(timezone.utc).replace(hour=int(hh), minute=0, second=0, microsecond=0, tzinfo=None)
-        if t > mod.astimezone(timezone.utc).replace(tzinfo=None):
-            t -= timedelta(days=1)
-        when = jst(t) if name in ANALYSIS else f"初期値 {jst(t)}"
+        data, t = self.nwp_pdf(name)
+        when = tlabel(t) if name in ANALYSIS else f"初期値 {tlabel(t)}"
         return pdf_to_image(data), when
+
+    def panel(self, spec, ft):
+        """spec = "FXFE502.1" のように 図の名前.パネル番号。ft = 予想時間。パネルだけ切り出した Chart を返す。"""
+        import pymupdf
+        from PIL import Image
+        name, idx = spec.split(".")
+        data, init = self.nwp_pdf(CATALOG[name][1])
+        page = pymupdf.open(stream=data, filetype="pdf")[0]
+        rects = panel_rects(page)
+        x0, y0, x1, y1 = rects[int(idx) - 1]
+        # 枠の下にある「T=12 VALID ...」の行も入れる
+        clip = pymupdf.Rect(x0 - 2, y0 - 2, x1 + 2, min(y1 + 22, page.rect.y1))
+        pix = page.get_pixmap(dpi=PANEL_DPI, clip=clip)
+        image = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
+        if len(rects) == 4:
+            pos = "上段" if int(idx) <= 2 else "下段"
+            if name == "FXJP854":
+                pos = ""
+        else:
+            pos = "上段" if int(idx) == 1 else "下段"
+        return Chart(spec, f"T={ft}  {name} {pos}".rstrip(), f"{tlabel(init + timedelta(hours=ft))} 初期値{init:%d}日{init:%H}UTC",
+                     overlay.apply(spec, image))
 
     def chart(self, name):
         kind, arg, title = CATALOG[name]
