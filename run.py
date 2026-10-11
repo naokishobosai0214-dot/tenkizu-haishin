@@ -46,19 +46,32 @@ def build():
         img.save(os.path.join(SITE, full), quality=85, optimize=True)
         img.thumbnail((1024, 1024))
         img.save(os.path.join(SITE, prev), quality=80, optimize=True)
-        pages.append({"title": p["title"], "full": full, "preview": prev})
+        singles = []  # 1枚ずつ大きく見る用(元の解像度のまま)
+        for c in charts:
+            f = f"{c.name}_{stamp}.jpg"
+            c.image.save(os.path.join(SITE, f), quality=90, optimize=True)
+            singles.append({"name": c.name, "title": c.title, "when": c.when, "file": f})
+        pages.append({"title": p["title"], "full": full, "preview": prev, "charts": singles})
         print(f"  {p['title']}: {len(charts)}枚 → {full}")
     write_index(pages, made_at)
     return pages, now
 
 
 def write_index(pages, made_at):
-    figs = "\n".join(f'<h2>{p["title"]}</h2><a href="{p["full"]}"><img src="{p["full"]}" alt="{p["title"]}"></a>' for p in pages)
+    toc = " ".join(f'<a href="#p{i}">{p["title"]}</a>' for i, p in enumerate(pages, 1))
+    figs = ""
+    for i, p in enumerate(pages, 1):
+        figs += f'<h2 id="p{i}">{p["title"]}</h2><a href="{p["full"]}"><img src="{p["full"]}" alt="{p["title"]}"></a>'
+        for c in p["charts"]:
+            figs += (f'<h3 id="{c["name"]}">{c["title"]} <small>{c["when"]}</small></h3>'
+                     f'<a href="{c["file"]}"><img src="{c["file"]}" alt="{c["title"]}" loading="lazy"></a>')
     html = f"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>天気図配信</title><style>body{{margin:0;padding:16px;font-family:sans-serif;background:#fff;color:#111}}
-img{{width:100%;height:auto;border:1px solid #ccc}}h2{{font-size:18px;margin:24px 0 8px}}</style></head>
-<body><h1 style="font-size:20px">天気図配信 <small>{made_at}</small></h1>{figs}
+img{{width:100%;height:auto;border:1px solid #ccc}}h2{{font-size:18px;margin:32px 0 8px;padding:6px 8px;background:#10305a;color:#fff}}
+h3{{font-size:15px;margin:20px 0 6px}}h3 small{{font-weight:normal;color:#555}}nav a{{margin-right:12px}}</style></head>
+<body><h1 style="font-size:20px">天気図配信 <small>{made_at}</small></h1>
+<nav>{toc}</nav><p style="font-size:13px;color:#555">まとめ画像のあとに1枚ずつの図があります。図をタップすると原寸で開きます(拡大できます)。</p>{figs}
 <p style="color:#666;font-size:12px">出典：気象庁ホームページ</p></body></html>"""
     open(os.path.join(SITE, "index.html"), "w", encoding="utf-8").write(html)
     open(os.path.join(SITE, "latest.json"), "w", encoding="utf-8").write(json.dumps(pages, ensure_ascii=False))
