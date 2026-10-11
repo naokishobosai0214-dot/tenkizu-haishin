@@ -10,15 +10,15 @@ FONT_R = os.path.join(_here, "fonts", "BIZUDGothic-Regular.ttf")
 W = 2400
 PAD, GAP = 20, 16
 HEAD, FOOT, CAP = 84, 44, 62     # ページ見出し帯・出典帯・各図の見出し(2行)の高さ
-NAVY, GRAY = (16, 42, 84), (232, 236, 242)
+NAVY, GRAY, RED = (16, 42, 84), (232, 236, 242), (208, 0, 0)
 
 
 def font(size, bold=True):
     return ImageFont.truetype(FONT_B if bold else FONT_R, size)
 
 
-def compose(title, charts, cols, made_at):
-    """charts: charts.Chart のリスト。made_at: 作成時刻の文字列。"""
+def compose(title, charts, cols, made_at, highlight=()):
+    """charts: charts.Chart のリスト。made_at: 作成時刻の文字列。highlight の名前の図は赤い太枠で囲む。"""
     W = 2400 if cols <= 3 else 800 * cols  # 4列以上は横に広げて1枚が小さくなりすぎないように
     rows = [charts[i:i + cols] for i in range(0, len(charts), cols)]
     # 1行の図は高さをそろえ、縦長・横長が混ざっても行の横幅いっぱいに並べる
@@ -43,9 +43,13 @@ def compose(title, charts, cols, made_at):
         x = PAD
         for c, im in zip(r, ims):
             cw = im.width
-            caption(d, x, y, cw, c)
+            hot = c.name in highlight
+            caption(d, x, y, cw, c, hot)
             img.paste(im, (x, y + CAP))
-            d.rectangle([x, y, x + cw, y + CAP + im.height], outline=(150, 150, 150), width=2)
+            if hot:
+                d.rectangle([x - 4, y - 4, x + cw + 4, y + CAP + im.height + 4], outline=RED, width=8)
+            else:
+                d.rectangle([x, y, x + cw, y + CAP + im.height], outline=(150, 150, 150), width=2)
             x += cw + GAP
         y += rh + GAP
 
@@ -57,17 +61,17 @@ ROWHEAD = 52     # 表の各行の上の帯(高さの層と、引用した天気
 CELL_W = 700     # 表の1マスの幅
 
 
-def caption(d, x, y, cw, c):
-    """図の上の2行の見出し(1行目=名前、2行目=時刻)。"""
-    d.rectangle([x, y, x + cw, y + CAP], fill=GRAY)
+def caption(d, x, y, cw, c, hot=False):
+    """図の上の2行の見出し(1行目=名前、2行目=時刻)。hot=True は赤地に白文字。"""
+    d.rectangle([x, y, x + cw, y + CAP], fill=RED if hot else GRAY)
     size = 22
     while size > 12 and d.textlength(c.title, font=font(size)) > cw - 20:
         size -= 1
-    d.text((x + 10, y + 18), c.title, font=font(size), fill=NAVY, anchor="lm")
-    d.text((x + 10, y + 45), c.when, font=font(18, False), fill=(40, 40, 40), anchor="lm")
+    d.text((x + 10, y + 18), c.title, font=font(size), fill="white" if hot else NAVY, anchor="lm")
+    d.text((x + 10, y + 45), c.when, font=font(18, False), fill="white" if hot else (40, 40, 40), anchor="lm")
 
 
-def compose_matrix(title, rows, ncols, made_at):
+def compose_matrix(title, rows, ncols, made_at, CELL_W=CELL_W):
     """予想時間を横、高さの層を縦に並べた表。
     rows: [(行の見出し, 引用した天気図の説明, [Chart または None, ...]), ...]"""
     W = PAD * 2 + CELL_W * ncols + GAP * (ncols - 1)

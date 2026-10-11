@@ -21,6 +21,7 @@ CATALOG = {
     "ASAS": ("asas", 0, "地上天気図 ASAS 最新"),
     "ASAS_12h_ago": ("asas", 12, "地上天気図 ASAS 12時間前"),
     "ASAS_24h_ago": ("asas", 24, "地上天気図 ASAS 24時間前"),
+    "ASAS_obs": ("asas_obs", "aupq35", "地上天気図 ASAS"),  # 高層の実況と同じ時刻のASAS
     "FSAS24": ("fsas", 24, "地上 24時間予想 FSAS24"),
     "FSAS48": ("fsas", 48, "地上 48時間予想 FSAS48"),
     "AUPA20": ("nwp", "aupa20", "AUPA20 200hPa 高度・気温・風・圏界面"),
@@ -118,32 +119,37 @@ class Fetcher:
         data, _ = get(f"{WXCHART}{t:%Y%m}/ASAS_MONO_{t:%Y%m%d%H%M}.pdf")
         return pdf_to_image(data), tlabel(t)
 
+    def asas_obs(self, ref):
+        t = self.nwp_pdf(ref)[1]
+        data, _ = get(f"{WXCHART}{t:%Y%m}/ASAS_MONO_{t:%Y%m%d%H%M}.pdf")
+        return pdf_to_image(data), tlabel(t)
+
     def fsas(self, ft):
         init = valid_time(self.wxlist()[f"ft{ft}"][-1])
         data, _ = get(f"{WXCHART}FSAS{ft}_MONO_ASIA.pdf")
         return pdf_to_image(data), f"{tlabel(init + timedelta(hours=ft))} 初期値{init:%d}日{init:%H}UTC"
 
-    def nwp_pdf(self, name):
-        """00UTC版と12UTC版のうち、更新が新しい方の (PDFの中身, 図の時刻UTC)。"""
+    def nwp_pdf(self, name, prev=False):
+        """00UTC版と12UTC版のうち、更新が新しい方の (PDFの中身, 図の時刻UTC)。prev=True なら古い方(1つ前の初期値)。"""
         if name not in self._nwp:
             got = []
             for hh in ("00", "12"):
                 data, mod = get(f"{NWPMAP}{name}_{hh}.pdf")
-                got.append((parsedate_to_datetime(mod), hh, data))
-            mod, hh, data = max(got)
-            mod = mod.astimezone(timezone.utc).replace(tzinfo=None)
-            t = mod.replace(hour=int(hh), minute=0, second=0, microsecond=0)
-            if t > mod:
-                t -= timedelta(days=1)
-            self._nwp[name] = (data, t)
-        return self._nwp[name]
+                mod = parsedate_to_datetime(mod).astimezone(timezone.utc).replace(tzinfo=None)
+                t = mod.replace(hour=int(hh), minute=0, second=0, microsecond=0)
+                if t > mod:
+                    t -= timedelta(days=1)
+                got.append((t, data))
+            got.sort()
+            self._nwp[name] = {False: (got[1][1], got[1][0]), True: (got[0][1], got[0][0])}
+        return self._nwp[name][prev]
 
     def nwp(self, name):
         data, t = self.nwp_pdf(name)
         when = tlabel(t) if name in ANALYSIS else f"初期値 {tlabel(t)}"
         return pdf_to_image(data), when
 
-    def panel(self, spec, ft):
+    def panel(self, spec, ft, prev=False):
         """表の1マス分の Chart を返す。ft = 予想時間(0 は実況)。
         spec = "FXFE502.1" のように 図の名前.パネル番号 ならそのパネルだけ切り出す。"ASAS" のように番号なしなら図全体。"""
         if "." not in spec:
@@ -152,7 +158,7 @@ class Fetcher:
         import pymupdf
         from PIL import Image
         name, idx = spec.split(".")
-        data, init = self.nwp_pdf(CATALOG[name][1])
+        data, init = self.nwp_pdf(CATALOG[name][1], prev)
         page = pymupdf.open(stream=data, filetype="pdf")[0]
         rects = panel_rects(page)
         x0, y0, x1, y1 = rects[int(idx) - 1]
@@ -167,6 +173,8 @@ class Fetcher:
         else:
             pos = "上段" if int(idx) == 1 else "下段"
         head = "実況" if ft == 0 else f"T={ft}"
+        if prev:
+            pos = (pos + " 1つ前の初期値").strip()
         when = tlabel(init) if ft == 0 else f"{tlabel(init + timedelta(hours=ft))} 初期値{init:%d}日{init:%H}UTC"
         return Chart(spec, f"{head}  {name} {pos}".rstrip(), when, overlay.apply(spec, image))
 

@@ -31,7 +31,7 @@ def load_layout():
 def page_names(p):
     """そのページで使う図の名前(パネル指定 "FXFE502.1" は図の名前に直す。重ならないように)。"""
     if p.get("type") == "matrix":
-        names = [c.split(".")[0] for row in p["rows"] for c in row["cells"] if c]
+        names = [cell_spec(c)[0].split(".")[0] for row in p["rows"] for c in row["cells"] if c]
     else:
         names = p["charts"]
     return list(dict.fromkeys(names))
@@ -41,13 +41,21 @@ def layout_names(layout):
     return [n for p in layout["pages"] for n in page_names(p)]
 
 
-def source_text(cells, fts):
-    """表の1行で引用した天気図を「FXFE502 上段(T=12・24)」のように書く。"""
+def source_text(cells):
+    """表の1行で引用した天気図を「FXFE502 上段(T=12・24)」「AUPQ35 上段(実況)」のように書く。"""
     used = {}
-    for c, ft in zip(cells, fts):
+    for c in cells:
         if c:
-            used.setdefault(c.title.split("  ", 1)[1], []).append(str(ft))
-    return "・".join(f"{k}(T={'・'.join(v)})" for k, v in used.items())
+            head, name = c.title.split("  ", 1)
+            used.setdefault(name, []).append(head.replace("T=", ""))
+    return "・".join(f"{k}({'実況' if v == ['実況'] else 'T=' + '・'.join(v)})" for k, v in used.items())
+
+
+def cell_spec(c, ft=None):
+    """表の1マスの書き方: "FXFE502.1" か {cell: "FXJP854.1", ft: 12, prev: true}。(spec, ft, prev) を返す。"""
+    if isinstance(c, dict):
+        return c["cell"], c.get("ft", ft), c.get("prev", False)
+    return c, ft, False
 
 
 def check():
@@ -98,17 +106,18 @@ def build():
             rows = []
             for row in p["rows"]:
                 cells = []
-                for spec, ft in zip(row["cells"], p["ft"]):
+                for c, ft in zip(row["cells"], p["ft"]):
+                    spec, ft, prev = cell_spec(c, ft)
                     try:
-                        cells.append(fetcher.panel(spec, ft) if spec else None)
+                        cells.append(fetcher.panel(spec, ft, prev) if spec else None)
                     except Exception as e:
                         print(f"  切り出せず {spec}: {e}")
                         cells.append(None)
                 if any(cells):
-                    rows.append((row["label"], source_text(cells, p["ft"]), cells))
-            img = compose_matrix(p["title"], rows, len(p["ft"]), made_at)
+                    rows.append((row["label"], source_text(cells), cells))
+            img = compose_matrix(p["title"], rows, len(p["ft"]), made_at, p.get("cell_w", 700))
         else:
-            img = compose(p["title"], charts, p.get("cols", 2), made_at)
+            img = compose(p["title"], charts, p.get("cols", 2), made_at, p.get("highlight", ()))
         full = f"p{i}_{stamp}.jpg"
         prev = f"p{i}_{stamp}_s.jpg"
         img.save(os.path.join(SITE, full), quality=85, optimize=True)
