@@ -1,0 +1,20 @@
+# LINE のリッチメニュー(トーク画面の下のボタン)を作り直す。手動実行だけ。
+# ボタンの中身は richmenu/make.py の BUTTONS。
+name: richmenu
+
+on:
+  workflow_dispatch:
+
+jobs:
+  richmenu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pillow
+      - name: リッチメニューを登録する
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+        run: python -X utf8 richmenu/make.py
