@@ -17,10 +17,10 @@ def font(size, bold=True):
     return ImageFont.truetype(FONT_B if bold else FONT_R, size)
 
 
-def compose(title, charts, cols, made_at, highlight=()):
-    """charts: charts.Chart のリスト。made_at: 作成時刻の文字列。highlight の名前の図は赤い太枠で囲む。"""
+def compose(title, rows, made_at, highlight=()):
+    """rows: 行ごとの charts.Chart のリスト。made_at: 作成時刻の文字列。highlight の名前の図は赤い太枠で囲む。"""
+    cols = max(len(r) for r in rows)
     W = 2400 if cols <= 3 else 800 * cols  # 4列以上は横に広げて1枚が小さくなりすぎないように
-    rows = [charts[i:i + cols] for i in range(0, len(charts), cols)]
     # 1行の図は高さをそろえ、縦長・横長が混ざっても行の横幅いっぱいに並べる
     full = W - PAD * 2
     scaled = []

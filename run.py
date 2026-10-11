@@ -32,6 +32,8 @@ def page_names(p):
     """そのページで使う図の名前(パネル指定 "FXFE502.1" は図の名前に直す。重ならないように)。"""
     if p.get("type") == "matrix":
         names = [cell_spec(c)[0].split(".")[0] for row in p["rows"] for c in row["cells"] if c]
+    elif "rows" in p:
+        names = [cell_spec(c)[0].split(".")[0] for row in p["rows"] for c in row if c]
     else:
         names = p["charts"]
     return list(dict.fromkeys(names))
@@ -116,8 +118,22 @@ def build():
                 if any(cells):
                     rows.append((row["label"], source_text(cells), cells))
             img = compose_matrix(p["title"], rows, len(p["ft"]), made_at, p.get("cell_w", 700))
+        elif "rows" in p:  # 行ごとに図を指定(パネル指定 "FXFE502.3" や {cell:, ft:} も使える)
+            rows = []
+            for row in p["rows"]:
+                cells = []
+                for c in row:
+                    spec, ft, prev = cell_spec(c)
+                    try:
+                        cells.append(fetcher.panel(spec, ft, prev) if "." in spec else fetcher.chart(spec))
+                    except Exception as e:
+                        print(f"  取得できず {spec}: {e}")
+                if cells:
+                    rows.append(cells)
+            img = compose(p["title"], rows, made_at, p.get("highlight", ()))
         else:
-            img = compose(p["title"], charts, p.get("cols", 2), made_at, p.get("highlight", ()))
+            cols = p.get("cols", 2)
+            img = compose(p["title"], [charts[k:k + cols] for k in range(0, len(charts), cols)], made_at, p.get("highlight", ()))
         full = f"p{i}_{stamp}.jpg"
         prev = f"p{i}_{stamp}_s.jpg"
         img.save(os.path.join(SITE, full), quality=85, optimize=True)
