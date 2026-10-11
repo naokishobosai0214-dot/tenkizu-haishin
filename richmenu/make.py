@@ -20,7 +20,8 @@ BUTTONS = [
     ("数値予報", "12 → 48時間", PAGE + "#p3"),
     ("PDF", "GoodNotes 用", PAGE + "latest.pdf?openExternalBrowser=1"),
     ("ページ全体", "1枚ずつ原寸", PAGE + "?openExternalBrowser=1"),
-    ("気象庁", "専門天気図", "https://www.jma.go.jp/bosai/numericmap/?openExternalBrowser=1"),
+    # Google ドライブの「天気図アーカイブ」(nao.kishobosai.0214 のドライブ。Apps Script が毎回保存する)
+    ("アーカイブ", "過去の配信", "https://drive.google.com/drive/folders/1D9bLiKvaKTfKRdQrGeFbNVJvDPVXLtNr?openExternalBrowser=1"),
 ]
 _here = os.path.dirname(os.path.abspath(__file__))
 FONT_B = os.path.join(_here, "..", "fonts", "BIZUDGothic-Bold.ttf")
