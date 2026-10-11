@@ -8,18 +8,18 @@
 # 送る時刻は .github/workflows/send.yml の cron(UTC) で決める。
 
 pages:
-  - title: 地上天気図
+  - title: 地上天気図(実況 → 予想)
     cols: 3
     charts: [ASAS_24h_ago, ASAS_12h_ago, ASAS, FSAS24, FSAS48]
 
-  - title: 高層天気図(実況)
-    cols: 2
-    charts: [AUPA20, AUPQ35, AUPQ78, AXFE578]
+  - title: 500hPa高度・渦度／地上気圧(実況 → 12・24 → 36・48 → 72時間)
+    cols: 4
+    charts: [AXFE578, FXFE502, FXFE504, FXFE507]
 
-  - title: 数値予報天気図(予想)
-    cols: 2
-    charts: [FXFE502, FXFE504, FXFE5782, FXFE5784]
+  - title: 700hPa湿数・850hPa気温(実況 → 12・24 → 36・48 → 72時間)
+    cols: 4
+    charts: [AUPQ78, FXFE5782, FXFE5784, FXFE577]
 
-  - title: 数値予報天気図(72時間・相当温位)
+  - title: 上層の実況・850hPa相当温位(予想)
     cols: 3
-    charts: [FXFE507, FXFE577, FXJP854]
+    charts: [AUPA20, AUPQ35, FXJP854]

@@ -9,7 +9,7 @@ FONT_R = os.path.join(_here, "fonts", "BIZUDGothic-Regular.ttf")
 
 W = 2400
 PAD, GAP = 20, 16
-HEAD, FOOT, CAP = 84, 44, 44     # ページ見出し帯・出典帯・各図の見出しの高さ
+HEAD, FOOT, CAP = 84, 44, 62     # ページ見出し帯・出典帯・各図の見出し(2行)の高さ
 NAVY, GRAY = (16, 42, 84), (232, 236, 242)
 
 
@@ -19,9 +19,16 @@ def font(size, bold=True):
 
 def compose(title, charts, cols, made_at):
     """charts: charts.Chart のリスト。made_at: 作成時刻の文字列。"""
-    cw = (W - PAD * 2 - GAP * (cols - 1)) // cols
+    W = 2400 if cols <= 3 else 800 * cols  # 4列以上は横に広げて1枚が小さくなりすぎないように
     rows = [charts[i:i + cols] for i in range(0, len(charts), cols)]
-    scaled = [[c.image.resize((cw, round(c.image.height * cw / c.image.width)), Image.LANCZOS) for c in r] for r in rows]
+    # 1行の図は高さをそろえ、縦長・横長が混ざっても行の横幅いっぱいに並べる
+    full = W - PAD * 2
+    scaled = []
+    for r in rows:
+        n = len(r) if len(r) == cols or len(rows) == 1 else cols  # 最後の半端な行は前の行と同じくらいの大きさに
+        ratios = [c.image.width / c.image.height for c in r]
+        h = (full - GAP * (n - 1)) / (sum(ratios) * n / len(r))
+        scaled.append([c.image.resize((round(h * a), round(h)), Image.LANCZOS) for c, a in zip(r, ratios)])
     heights = [CAP + max(im.height for im in r) for r in scaled]
     H = HEAD + sum(heights) + GAP * (len(rows) - 1) + FOOT + PAD
     img = Image.new("RGB", (W, H), "white")
@@ -33,18 +40,18 @@ def compose(title, charts, cols, made_at):
 
     y = HEAD
     for r, ims, rh in zip(rows, scaled, heights):
-        for i, (c, im) in enumerate(zip(r, ims)):
-            x = PAD + i * (cw + GAP)
+        x = PAD
+        for c, im in zip(r, ims):
+            cw = im.width
             d.rectangle([x, y, x + cw, y + CAP], fill=GRAY)
-            wf = font(20, False)
-            room = cw - 30 - d.textlength(c.when, font=wf)
             size = 22
-            while size > 12 and d.textlength(c.title, font=font(size)) > room:  # 長い見出しは文字を小さくして収める
+            while size > 12 and d.textlength(c.title, font=font(size)) > cw - 20:  # 長い見出しは文字を小さくして収める
                 size -= 1
-            d.text((x + 10, y + CAP // 2), c.title, font=font(size), fill=NAVY, anchor="lm")
-            d.text((x + cw - 10, y + CAP // 2), c.when, font=wf, fill=(40, 40, 40), anchor="rm")
+            d.text((x + 10, y + 18), c.title, font=font(size), fill=NAVY, anchor="lm")
+            d.text((x + 10, y + 45), c.when, font=font(18, False), fill=(40, 40, 40), anchor="lm")
             img.paste(im, (x, y + CAP))
             d.rectangle([x, y, x + cw, y + CAP + im.height], outline=(150, 150, 150), width=2)
+            x += cw + GAP
         y += rh + GAP
 
     d.text((W - PAD, H - FOOT // 2 - 4), "出典：気象庁ホームページ(天気図)", font=font(20, False), fill=(90, 90, 90), anchor="rm")
