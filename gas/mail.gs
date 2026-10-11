@@ -1,7 +1,7 @@
 /**
  * 天気図配信のメール送信(Google Apps Script)。
  * GitHub Actions が公開したページ(latest.json と画像)を取ってきて、自分宛てに画像添付で送る。
- * アプリパスワード不要。時刻は setup() で作るトリガー(毎日7時台・19時台)。
+ * アプリパスワード不要。setup() で作るトリガーが10分ごとにページを見て、新しい回が公開されていたら送る。
  * 同じ回を2度送らないよう、送った画像名を覚えておく。
  */
 const PAGE = 'https://naokishobosai0214-dot.github.io/tenkizu-haishin/';
@@ -20,8 +20,8 @@ function sendCharts() {
   props.setProperty('last', key);
 }
 
-// 最初に1回だけ実行: 毎日7時台と19時台に sendCharts を動かすトリガーを作る
+// 最初に1回だけ実行: 10分ごとに sendCharts を動かすトリガーを作る(新しい回がなければ何もしない)
 function setup() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
-  [7, 19].forEach(h => ScriptApp.newTrigger('sendCharts').timeBased().everyDays(1).atHour(h).nearMinute(15).inTimezone('Asia/Tokyo').create());
+  ScriptApp.newTrigger('sendCharts').timeBased().everyMinutes(10).create();
 }

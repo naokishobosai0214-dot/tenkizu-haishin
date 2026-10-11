@@ -1,13 +1,15 @@
-# 決まった時刻に天気図を並べた画像を作り、ページ(GitHub Pages)に公開してから、メールと LINE で送る。
-# 時刻は UTC。GitHub の時刻指定は数分〜数十分遅れることがあるので、少し前に設定している。
-#   "40 21 * * *" = 朝 6:40 JST(届くのは7時前後)   "40 9 * * *" = 夕 18:40 JST(届くのは19時前後)
-# 手動実行(Actions → send → Run workflow)でいつでも試し送信できる。
+# 気象庁の高層・数値予報図が更新されたら、並べた画像を作ってページ(GitHub Pages)に公開し、LINE で送る。
+# 気象庁の更新は 03:36・15:36 UTC(日本時間 12:36・深夜0:36)ごろ。その後の時間帯に10分ごとに調べ、
+# 全部の図が前回配信から更新されていたら送る(更新から約20分以内に届く)。変わっていなければ数秒で終わる。
+# 時間帯: UTC 3〜5時台・15〜17時台(日本時間 12〜14時台・0〜2時台)。最後の10分は一部だけの更新でも送る。
+# メールは Google Apps Script(gas/mail.gs)がページの更新を見て送る。
+# 手動実行(Actions → send → Run workflow)は更新がなくても作り直して送る。
 name: send
 
 on:
   schedule:
-    - cron: "40 21 * * *"
-    - cron: "40 9 * * *"
+    - cron: "*/10 3-5 * * *"
+    - cron: "*/10 15-17 * * *"
   workflow_dispatch:
     inputs:
       only:
@@ -40,19 +42,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
+      - run: pip install pyyaml
+      - name: 気象庁の図が更新されたか調べる
+        id: check
+        env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' }}
+        run: python -X utf8 run.py --check
+      - if: steps.check.outputs.changed == 'true'
+        run: pip install -r requirements.txt
       - name: 天気図を取って並べる
+        if: steps.check.outputs.changed == 'true'
         run: python -X utf8 run.py --dry-run
       - uses: actions/upload-pages-artifact@v3
+        if: steps.check.outputs.changed == 'true'
         with:
           path: site
       - name: ページに公開する
         id: deploy
+        if: steps.check.outputs.changed == 'true'
         uses: actions/deploy-pages@v4
       # メールは Google Apps Script(gas/mail.gs)が公開ページの画像を取って送る。
       # GMAIL_APP_PASSWORD を登録した場合だけ、ここからも送る。
       - name: メールで送る
-        if: (inputs.only == '' || inputs.only == 'both' || inputs.only == 'mail') && env.HAS_GMAIL == 'true'
+        if: steps.check.outputs.changed == 'true' && (inputs.only == '' || inputs.only == 'both' || inputs.only == 'mail') && env.HAS_GMAIL == 'true'
         env:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
@@ -60,7 +72,7 @@ jobs:
           PAGE_URL: ${{ steps.deploy.outputs.page_url }}
         run: python -X utf8 run.py --send-only --only mail
       - name: LINEで送る
-        if: inputs.only == '' || inputs.only == 'both' || inputs.only == 'line'
+        if: steps.check.outputs.changed == 'true' && (inputs.only == '' || inputs.only == 'both' || inputs.only == 'line')
         env:
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
@@ -68,6 +80,7 @@ jobs:
         run: python -X utf8 run.py --send-only --only line
       # 60日間リポジトリに変更がないと、時刻指定の実行が止まるため、有効にし直しておく
       - name: 自動実行を止めないようにする
+        if: steps.check.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/send.yml/enable"

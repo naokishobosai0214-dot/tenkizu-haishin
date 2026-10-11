@@ -5,25 +5,59 @@
   python -X utf8 run.py --only line   LINE だけ送る(画像が公開URLにある前提)
   python -X utf8 run.py               両方送る
   python -X utf8 run.py --send-only   作り直さず、site/latest.json の画像を送る(Actions で公開後に使う)
+  python -X utf8 run.py --check       気象庁の図が前回の配信から更新されたか調べる(changed=true/false)
 """
 import argparse
 import json
 import os
 from datetime import datetime, timedelta, timezone
 
+import urllib.request
+
 import yaml
 
-from charts import CATALOG, Fetcher
+from charts import CATALOG, Fetcher, nwp_updated
 from compose import compose
 
 _here = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.join(_here, "site")
 JST = timezone(timedelta(hours=9))
+PAGE_URL = "https://naokishobosai0214-dot.github.io/tenkizu-haishin/"
+
+
+def load_layout():
+    return yaml.safe_load(open(os.path.join(_here, "layout.yml"), encoding="utf-8"))
+
+
+def layout_names(layout):
+    return [n for p in layout["pages"] for n in p["charts"]]
+
+
+def check():
+    """前回配信(公開中の state.json)から、気象庁の図が全部更新されたら changed=true。
+    気象庁は 03:36・15:36 UTC(日本時間 12:36・0:36)ごろに高層・数値予報図をまとめて更新する。
+    待つ時間帯の最後(UTC 5時台・17時台の50分以降)は、一部だけの更新でも送る。"""
+    cur = nwp_updated(layout_names(load_layout()))
+    try:
+        with urllib.request.urlopen(PAGE_URL + "state.json?t=" + str(int(datetime.now().timestamp())), timeout=30) as r:
+            old = json.loads(r.read())["nwp"]
+    except Exception:
+        old = {}
+    fresh = [n for n in cur if cur[n] != old.get(n)]
+    utc = datetime.now(timezone.utc)
+    last_chance = utc.hour in (5, 17) and utc.minute >= 50
+    changed = bool(cur) and (len(fresh) == len(cur) or (fresh and last_chance))
+    if os.environ.get("FORCE") == "true":
+        changed = True
+    print(f"更新された図 {len(fresh)}/{len(cur)} → changed={changed}")
+    if "GITHUB_OUTPUT" in os.environ:
+        open(os.environ["GITHUB_OUTPUT"], "a").write(f"changed={'true' if changed else 'false'}\n")
 
 
 def build():
-    layout = yaml.safe_load(open(os.path.join(_here, "layout.yml"), encoding="utf-8"))
+    layout = load_layout()
     os.makedirs(SITE, exist_ok=True)
+    nwp = nwp_updated(layout_names(layout))  # 取る前に調べる(取得中に更新されても次回また送れるように)
     now = datetime.now(JST)
     stamp = now.strftime("%Y%m%d%H%M")
     made_at = f"{now:%Y/%m/%d %H:%M} JST 作成"
@@ -54,6 +88,7 @@ def build():
         pages.append({"title": p["title"], "full": full, "preview": prev, "charts": singles})
         print(f"  {p['title']}: {len(charts)}枚 → {full}")
     write_index(pages, made_at)
+    open(os.path.join(SITE, "state.json"), "w", encoding="utf-8").write(json.dumps({"nwp": nwp, "made_at": made_at}))
     return pages, now
 
 
@@ -83,7 +118,10 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only", choices=["mail", "line"])
     ap.add_argument("--send-only", action="store_true")
+    ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
+    if a.check:
+        return check()
     if a.send_only:
         pages = json.load(open(os.path.join(SITE, "latest.json"), encoding="utf-8"))
         now = datetime.now(JST)

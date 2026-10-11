@@ -71,6 +71,22 @@ def valid_time(name):
     return datetime.strptime(re.findall(r"_(\d{14})_MET", name)[0], "%Y%m%d%H%M%S")
 
 
+def nwp_updated(names):
+    """数値予報・高層の図ごとに、気象庁サーバーでの最新の更新時刻(UTC, ISO文字列)を返す。中身は取らない。"""
+    out = {}
+    for name in names:
+        kind, arg, _ = CATALOG[name]
+        if kind != "nwp":
+            continue
+        mods = []
+        for hh in ("00", "12"):
+            req = urllib.request.Request(f"{NWPMAP}{arg}_{hh}.pdf", method="HEAD", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                mods.append(parsedate_to_datetime(r.headers["Last-Modified"]))
+        out[name] = max(mods).astimezone(timezone.utc).isoformat()
+    return out
+
+
 class Fetcher:
     """1回の実行の中で同じ図を2度取りに行かないようにまとめて持つ。"""
 
