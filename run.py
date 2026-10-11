@@ -17,7 +17,6 @@ import urllib.request
 import yaml
 
 from charts import CATALOG, Fetcher, nwp_updated
-from compose import compose
 
 _here = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.join(_here, "site")
@@ -55,6 +54,7 @@ def check():
 
 
 def build():
+    from compose import compose  # PIL が要るので、作るときだけ読む
     layout = load_layout()
     os.makedirs(SITE, exist_ok=True)
     nwp = nwp_updated(layout_names(layout))  # 取る前に調べる(取得中に更新されても次回また送れるように)
